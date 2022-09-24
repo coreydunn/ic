@@ -9,7 +9,8 @@ function validate_ip()
 	local NETMASK_FORM=true # Innocent until proven guilty
 
 	# Check form for xxx.xxx.xxx.xxx
-	echo $1|grep '^[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}\(/[0-9]\+\)\?$'>/dev/null&&IP_FORM=true
+	echo $1|grep '^[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}\(/[0-9]\+\)\?$'>/dev/null&&IP_FORM=true \
+	 || return 2
 	#[ $IP_FORM = false ] && return 1
 	IP_ADDRESS=$(printf $1|grep -o '[^\/]\+'|tr '\n' ' '|sed 's/ .*//g')
 
@@ -25,15 +26,16 @@ function validate_ip()
 			# Check netmask value
 			NETMASK=$y
 			if [ ! $y -ge 0 ] || [ ! $y -le 32 ]; then
-				echo "error: netmask $y not within 0-32"
+				echo "error: netmask $y not within 0-32" >&2
 				NETMASK_FORM=false
-				#return 2
+				return 1
 			fi
 		fi
 
 		if [ ! $x -ge 0 ] || [ ! $x -lt 256 ]; then
-			echo error: octet $x not within 0-255
+			echo error: octet $x not within 0-255 >&2
 			IP_FORM=false
+			return 2
 		fi
 	done
 
@@ -109,13 +111,16 @@ function main()
 		x=$1
 	fi
 
-	local VALIDATED_IPINFO=$(validate_ip $x)
+	VALIDATED_IPINFO=$(validate_ip $x)
+	if [ ! $? = 0 ]; then
+		echo ERROR >&2
+		return 2
+	fi
 	local IP_ADDRESS=$(echo $VALIDATED_IPINFO|cut -d' ' -f1)
 	local CIDRNETMASK=$(echo $VALIDATED_IPINFO|cut -d' ' -f2)
 	local NETMASK=$(get_netmask $CIDRNETMASK)
 	local NETADDR=$(get_network $IP_ADDRESS $NETMASK)
 	local WILDCARD=$(get_wildcard $NETMASK)
-	[ $? = 0 ] || echo ERROR
 
 	echo "Address: $IP_ADDRESS"
 	echo "Netmask: $NETMASK ($CIDRNETMASK)"
