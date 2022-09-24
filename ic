@@ -1,0 +1,126 @@
+#!/bin/bash
+
+# Ensure IP + netmask is in sane format
+function validate_ip()
+{
+	local IP_ADDRESS=''
+	local IP_FORM=false # Guilty until proven innocent
+	local NETMASK=32 # Assume /32 netmask
+	local NETMASK_FORM=true # Innocent until proven guilty
+
+	# Check form for xxx.xxx.xxx.xxx
+	echo $1|grep '^[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}\(/[0-9]\+\)\?$'>/dev/null&&IP_FORM=true
+	#[ $IP_FORM = false ] && return 1
+	IP_ADDRESS=$(printf $1|grep -o '[^\/]\+'|tr '\n' ' '|sed 's/ .*//g')
+
+	# Check values within 0-255
+	for x in $(echo $1|tr '\.' '\n'); do
+
+		# If CIDR notation found, parse netmask
+		if [ $(echo $x|fgrep /) ]; then
+			m=$(echo $x|cut -d'/' -f1)
+			y=$(echo $x|cut -d'/' -f2)
+			x=$m
+
+			# Check netmask value
+			NETMASK=$y
+			if [ ! $y -ge 0 ] || [ ! $y -le 32 ]; then
+				echo "error: netmask $y not within 0-32"
+				NETMASK_FORM=false
+				#return 2
+			fi
+		fi
+
+		if [ ! $x -ge 0 ] || [ ! $x -lt 256 ]; then
+			echo error: octet $x not within 0-255
+			IP_FORM=false
+		fi
+	done
+
+	echo "$IP_ADDRESS $NETMASK"
+	[ $IP_FORM = true ] || return 2
+	[ $NETMASK_FORM = true ] || return 1
+	return 0
+}
+
+# Calculate netmask
+function get_netmask()
+{
+	local NETMASK=$1
+
+	# Get decimal network bits for each octet
+	for octet in $(seq 1 4); do
+		if [ $NETMASK -ge 8 ]; then
+			printf 255
+		elif [ $NETMASK -gt 0 ]; then
+			printf '%d' 0x$(printf  %x $(( ~(2**(8-$NETMASK)) +1 ))|\grep -o '..$')
+		else
+			printf 0
+		fi
+
+		[ $octet -lt 4 ] && printf '.'
+		NETMASK=$(( $NETMASK - 8 ))
+	done
+	echo ''
+}
+
+# Calculate network
+function get_network()
+{
+	local IP_ADDRESS=$1
+	local NETMASK=$2
+
+	local oc1=$(echo $IP_ADDRESS|tr '.' ' '|awk '{print $1}')
+	local oc2=$(echo $IP_ADDRESS|tr '.' ' '|awk '{print $2}')
+	local oc3=$(echo $IP_ADDRESS|tr '.' ' '|awk '{print $3}')
+	local oc4=$(echo $IP_ADDRESS|tr '.' ' '|awk '{print $4}')
+
+	local nm1=$(echo $NETMASK|tr '.' ' '|awk '{print $1}')
+	local nm2=$(echo $NETMASK|tr '.' ' '|awk '{print $2}')
+	local nm3=$(echo $NETMASK|tr '.' ' '|awk '{print $3}')
+	local nm4=$(echo $NETMASK|tr '.' ' '|awk '{print $4}')
+	#echo \'$nm1 $nm2 $nm3 $nm4\'
+
+	printf "$(( $oc1 & $nm1 ))."
+	printf "$(( $oc2 & $nm2 ))."
+	printf "$(( $oc3 & $nm3 ))."
+	printf "$(( $oc4 & $nm4 ))\n"
+}
+
+# Get Wildcard address
+function get_wildcard()
+{
+	local NETMASK=$1
+
+	local nm=$(echo $NETMASK|tr '.' '\n')
+
+	for x in $nm; do
+		printf "%d" 0x$(printf %x $(( ~$x )) |\grep -o ..$)
+		[ $x -lt 4 ] && printf '\n' || printf '.'
+	done
+}
+
+# Ask network question about network address
+function main()
+{
+	if [ $# = 0 ]; then
+		read -p \> x
+	else
+		x=$1
+	fi
+
+	local VALIDATED_IPINFO=$(validate_ip $x)
+	local IP_ADDRESS=$(echo $VALIDATED_IPINFO|cut -d' ' -f1)
+	local CIDRNETMASK=$(echo $VALIDATED_IPINFO|cut -d' ' -f2)
+	local NETMASK=$(get_netmask $CIDRNETMASK)
+	local NETADDR=$(get_network $IP_ADDRESS $NETMASK)
+	local WILDCARD=$(get_wildcard $NETMASK)
+	[ $? = 0 ] || echo ERROR
+
+	echo "Address: $IP_ADDRESS"
+	echo "Netmask: $NETMASK ($CIDRNETMASK)"
+	echo "Network: $NETADDR/$CIDRNETMASK"
+	echo "Wildcard: $WILDCARD"
+}
+
+main $*
