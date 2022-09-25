@@ -9,8 +9,7 @@ function validate_ip()
 	local NETMASK_FORM=true # Innocent until proven guilty
 
 	# Check form for xxx.xxx.xxx.xxx
-	echo $1|grep '^[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}\(/[0-9]\+\)\?$'>/dev/null&&IP_FORM=true \
-	 || return 2
+	echo $1|grep '^[0-9]\+.[0-9]\+.[0-9]\+.[0-9]\+\(/[0-9]\+\)\?$'>/dev/null&&IP_FORM=true || return 2
 	#[ $IP_FORM = false ] && return 1
 	IP_ADDRESS=$(printf $1|grep -o '[^\/]\+'|tr '\n' ' '|sed 's/ .*//g')
 
