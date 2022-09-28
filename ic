@@ -96,9 +96,8 @@ function get_wildcard()
 	local nm=$(echo $NETMASK|tr '.' '\n')
 
 	for x in $nm; do
-		printf "%d" 0x$(printf %x $(( ~$x )) |\grep -o ..$)
-		[ $x -lt 4 ] && printf '\n' || printf '.'
-	done
+		printf "%d." 0x$(printf %x $(( ~$x )) |\grep -o ..$)
+	done|sed 's/\.$//g'
 }
 
 # Ask network question about network address
